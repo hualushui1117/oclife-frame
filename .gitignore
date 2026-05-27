@@ -1,0 +1,12 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+output/
+session/
+*.zip
+*.mp4
+*.jpg
+*.jpeg
+*.png
+.DS_Store
