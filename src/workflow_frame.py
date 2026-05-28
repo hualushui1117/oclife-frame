@@ -43,8 +43,6 @@ def step1a_generate_anchors(
     idle_url = CLIENT.generate_image(
         prompt=standardize_prompt,
         image_urls=[source_image_url],
-        width=1080,
-        height=1920,
     )
     idle_path = work_dir / "角色标准正面图.png"
     CLIENT.download_file(idle_url, str(idle_path))
@@ -54,8 +52,6 @@ def step1a_generate_anchors(
     neutral_url = CLIENT.generate_image(
         prompt=neutral_frame_prompt,
         image_urls=[idle_url],
-        width=1080,
-        height=1920,
     )
     neutral_path = work_dir / "中性帧.png"
     CLIENT.download_file(neutral_url, str(neutral_path))

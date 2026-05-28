@@ -53,8 +53,7 @@ def cmd_generate_image(args):
     url = client.generate_image(
         prompt=args.prompt,
         image_urls=image_urls,
-        width=args.width,
-        height=args.height,
+        size=args.size,
     )
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     client.download_file(url, args.output)
@@ -245,8 +244,7 @@ def main():
     p.add_argument("--output", required=True)
     p.add_argument("--save-url", default=None, help="session JSON file to update")
     p.add_argument("--key", default=None, help="key to store URL under in session JSON")
-    p.add_argument("--width", type=int, default=1080)
-    p.add_argument("--height", type=int, default=1920)
+    p.add_argument("--size", type=int, default=None, help="image area in pixels (e.g. 4194304 for 2048x2048)")
 
     # generate-preview
     p = sub.add_parser("generate-preview")
