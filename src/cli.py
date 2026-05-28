@@ -188,7 +188,7 @@ def cmd_check_env(args):
     print(f"[{status}] Python {v.major}.{v.minor}.{v.micro}")
 
     # Dependencies
-    for pkg, import_name in [("requests", "requests"), ("python-dotenv", "dotenv")]:
+    for pkg, import_name in [("requests", "requests"), ("python-dotenv", "dotenv"), ("volcenginesdkcore", "volcenginesdkcore")]:
         try:
             importlib.import_module(import_name)
             print(f"[✓] {pkg}")
