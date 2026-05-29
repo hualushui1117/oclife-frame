@@ -105,9 +105,28 @@ python3 src/cli.py check-env
 
 ### Step 1-A — 角色图标准化 + 中性帧
 
-**收集：** 等待用户提供角色图 URL、角色描述、目标风格（二次元/写实/Q版/3D渲染）。
+**收集：** 等待用户提供角色图 + 角色描述。
 
-**分析：** 读取 [`references/prompt-rules.md`](./references/prompt-rules.md)，判断角色类型和图片资质（构图是否正面/微侧面，清晰度是否 ≥1024×1024），确定 `STANDARDIZE_PROMPT`。
+**分析：** 读取 [`references/prompt-rules.md`](./references/prompt-rules.md)，判断角色类型，检查图片资质：
+
+| 检查项 | 说明 |
+|--------|------|
+| 构图 | 是否为人物或角色正面/微侧面 |
+| 清晰度 | 是否 ≥1024×1024 |
+
+```
+清晰度达标，构图不达标 → 退回，告知用户重新上传符合构图要求的图片，停止本步骤
+清晰度不达标，构图达标 → 先用 ffmpeg 处理至标准清晰度，再继续生成
+两者均达标             → 直接继续生成
+```
+
+若需 ffmpeg 处理清晰度：
+
+```bash
+ffmpeg -i "SOURCE_IMAGE" -vf "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2" "session/角色图_标准化.png"
+```
+
+确定 `STANDARDIZE_PROMPT` 后继续。
 
 **生成角色标准正面图：**
 
