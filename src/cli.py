@@ -49,10 +49,19 @@ def _save_session(path: str, data: dict) -> None:
 def cmd_generate_image(args):
     """Step 1-A: 生成角色标准正面图 或 中性帧。"""
     client = _load_client()
-    image_urls = [args.source_url] if args.source_url else None
+    # 判断 source 是本地文件路径还是远程 URL
+    source = args.source_url
+    image_urls = None
+    image_paths = None
+    if source:
+        if os.path.isfile(source):
+            image_paths = [source]
+        else:
+            image_urls = [source]
     url = client.generate_image(
         prompt=args.prompt,
         image_urls=image_urls,
+        image_paths=image_paths,
         width=args.width,
         height=args.height,
     )

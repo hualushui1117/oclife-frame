@@ -13,6 +13,7 @@ Step 0-2 的角色分析/档案/状态描述由 Claude agent 交互完成后，
 
 import os
 import json
+import shutil
 import concurrent.futures
 from pathlib import Path
 from dotenv import load_dotenv
@@ -37,8 +38,38 @@ def step1a_generate_anchors(
 ) -> dict:
     """
     生成两张锚点图并下载到 work_dir。
+    本地文件也走 I2I 重新生成，确保标准化。
     返回 {"idle_url": ..., "neutral_url": ..., "idle_path": ..., "neutral_path": ...}
     """
+    # 检测本地文件
+    local_source = source_image_url.replace("file://", "") if source_image_url.startswith("file://") else source_image_url
+    if os.path.isfile(local_source):
+        print(f"\n── Step 1-A: 使用本地原图作为参考，重新生成角色标准正面图 ──")
+        idle_url = CLIENT.generate_image(
+            prompt=standardize_prompt,
+            image_paths=[local_source],
+        )
+        idle_path = work_dir / "角色标准正面图.png"
+        CLIENT.download_file(idle_url, str(idle_path))
+        print(f"[done] 角色标准正面图 → {idle_path}")
+
+        print(f"\n── Step 1-A: 生成中性帧 ──")
+        neutral_url = CLIENT.generate_image(
+            prompt=neutral_frame_prompt,
+            image_paths=[str(idle_path)],
+        )
+        neutral_path = work_dir / "中性帧.png"
+        CLIENT.download_file(neutral_url, str(neutral_path))
+        print(f"[done] 中性帧 → {neutral_path}")
+
+        return {
+            "idle_url": idle_url,
+            "neutral_url": neutral_url,
+            "idle_path": str(idle_path),
+            "neutral_path": str(neutral_path),
+        }
+
+    # 远程 URL，走 I2I
     print("\n── Step 1-A: 生成角色标准正面图 ──")
     idle_url = CLIENT.generate_image(
         prompt=standardize_prompt,
@@ -72,11 +103,23 @@ def step1c_generate_preview(
     preview_prompt: str,
     work_dir: Path,
 ) -> str:
-    """生成 5s 预览视频（首帧模式）。返回本地保存路径。"""
+    """生成 5s 预览视频（首尾帧模式，首尾帧=角色标准图）。返回本地保存路径。"""
     print("\n── Step 1-C: 生成 5s 预览视频 ──")
-    video_url = CLIENT.generate_preview_video(
+    # Auto-detect local file
+    idle_path = None
+    if idle_anchor_url.startswith("file://"):
+        idle_path = idle_anchor_url.replace("file://", "")
+        idle_anchor_url = None
+    elif os.path.isfile(idle_anchor_url):
+        idle_path = idle_anchor_url
+        idle_anchor_url = None
+    
+    video_url = CLIENT.generate_video(
         prompt=preview_prompt,
         first_frame_url=idle_anchor_url,
+        first_frame_path=idle_path,
+        last_frame_url=idle_anchor_url,
+        last_frame_path=idle_path,
         duration_s=5,
     )
     save_path = work_dir / "5s预览视频.mp4"
@@ -130,11 +173,34 @@ def _build_video_tasks(
 
 
 def _submit_and_download(task: dict, videos_dir: Path) -> dict:
+    save_path = videos_dir / task["filename"]
+    if save_path.exists() and save_path.stat().st_size > 0:
+        print(f"[skip] {task['filename']} 已存在 ({save_path.stat().st_size // 1024} KB)")
+        return {"filename": task["filename"], "status": "ok", "skipped": True}
+    
     print(f"[submit] {task['filename']}")
+    # Auto-detect local file paths
+    first_url = task["first_frame"]
+    last_url = task["last_frame"]
+    first_path = None
+    last_path = None
+    
+    for url_var, path_var in [(first_url, "first_path"), (last_url, "last_path")]:
+        local = url_var.replace("file://", "") if url_var.startswith("file://") else url_var
+        if os.path.isfile(local):
+            if path_var == "first_path":
+                first_path = local
+                first_url = None
+            else:
+                last_path = local
+                last_url = None
+    
     task_id = CLIENT.submit_video_first_last(
         prompt=task["prompt"],
-        first_frame_url=task["first_frame"],
-        last_frame_url=task["last_frame"],
+        first_frame_url=first_url,
+        first_frame_path=first_path,
+        last_frame_url=last_url,
+        last_frame_path=last_path,
         duration_s=task["duration_s"],
     )
     print(f"[waiting] {task['filename']}  task_id={task_id}")
@@ -190,11 +256,19 @@ _STATE_MAP = {
 
 
 def _state_key(filename: str) -> str:
-    name = Path(filename).stem  # e.g. char001_frame_transition_state_change_001_v1
+    name = Path(filename).stem  # e.g. char001_frame_dialogue_base_001_v1
     for key in ("transition_state_change", "transition_return_to_idle"):
         if key in name:
             return key
-    return name.split("_frame_")[1].split("_")[0]  # idle / listen / dialogue_base
+    # 匹配 _STATE_MAP 的 key（idle / listen / dialogue_base）
+    after_frame = name.split("_frame_")[1]  # dialogue_base_001_v1
+    for key in _STATE_MAP.keys():
+        if after_frame.startswith(key):
+            return key
+    fallback = after_frame.split("_")[0]
+    if fallback == "dialogue":
+        return "dialogue_base"
+    return fallback
 
 
 def step4_write_package(
